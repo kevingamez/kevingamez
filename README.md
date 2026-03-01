@@ -2,17 +2,11 @@
 
 **Founding Engineer @ [Enttor](https://www.enttor.ai/)** · Building the only outbound messaging platform startups need.
 
-I'm a full-stack engineer from Bogotá, Colombia 🇨🇴 with a background in deep learning and computer vision. I hold a BSc in Systems & Computer Engineering and an MSc in Information Engineering from Universidad de los Andes, with minors in Mathematics and Management.
+Hi! I'm Kevin Gamez, the Founding Engineer at Enttor, the only outbound messaging platform startups need.
 
-At Enttor, I architected the full-stack application from scratch — browser automation systems, AI pipelines for personalized outreach at scale, and data infrastructure powering multi-platform prospecting.
+At Enttor, I architected the full-stack application from the ground up, building browser automation systems, and building browser automation systems, and integrating AI pipelines that power personalized outreach at scale.
 
----
-
-### 🛠 What I work with
-
-**Languages & Frameworks:** TypeScript · Python · Next.js · Node.js · React Native · FastAPI · NestJS  
-**Data & AI:** PostgreSQL · pgvector · PyTorch · TensorFlow · Computer Vision · Satellite Imagery  
-**Infrastructure:** Docker · AWS · Google Cloud Run · Redis · MongoDB · CI/CD  
+I have Bachelor and Masters in Information Engineering from Uniandes with a specialization in deep learning.
 
 ---
 
