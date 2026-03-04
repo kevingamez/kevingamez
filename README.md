@@ -1,16 +1,24 @@
-# Hey, I'm Kevin 👋
+# Hey, I'm Kevin
 
 **Founding Engineer @ [Enttor](https://www.enttor.ai/)** · Building the only outbound messaging platform startups need.
 
-Hi! I'm Kevin Gamez, the Founding Engineer at Enttor, the only outbound messaging platform startups need.
+Hi! I'm Kevin Gamez, the Founding Engineer at Enttor, the only outbound messaging platform startups need. At Enttor, I architected the full-stack application from the ground up, building browser automation systems and integrating AI pipelines that power personalized outreach at scale.
 
-At Enttor, I architected the full stack application from the ground up, building browser automation systems, and building browser automation systems, and integrating AI pipelines that power personalized outreach at scale.
+I have a Bachelor's and Master's in Information Engineering from Uniandes with a specialization in deep learning.
 
-I have Bachelor and Masters in Information Engineering from Uniandes with a specialization in deep learning.
+More about me: [kevingamez.co](https://kevingamez.co)
 
 ---
 
-### 🔬 Featured work
+### My engineering work
+
+- **AI outbound & browser automation:** Built Enttor's AI outbound engine and browser-based automation flows for multi-platform prospecting, automating DMs and lead qualification.
+- **Data analytics systems:** Designed complex SQL models and analytics pipelines, used Power BI to drive executive reporting in HR, risk, and operations across multiple corporate environments.
+- **Deep learning & computer vision:** Trained models on satellite imagery to detect croplands and environmental risk.
+
+---
+
+### Featured work
 
 | Project | Description | Stack |
 |---------|-------------|-------|
@@ -20,20 +28,20 @@ I have Bachelor and Masters in Information Engineering from Uniandes with a spec
 
 ---
 
-### 📍 Previously
+### Previously
 
-- **Product Engineer** at Samsam shipped features across shopper and merchant apps, refactored core backend services for a high-growth e-commerce startup.
-- **Graduate TA** at Universidad de los Andes designed lab material and supported students in advanced CS courses.
-
----
-
-### 🏅 Awards
-
-🎖 **Andrés Bello Distinction** National Category, awarded by Colombia's Ministry of Education (2018)
+- **Product Engineer** at Samsam — shipped features across shopper and merchant apps, refactored core backend services for a high-growth e-commerce startup.
+- **Graduate TA** at Universidad de los Andes — designed lab material and supported students in advanced CS courses.
 
 ---
 
-### 📫 Let's connect
+### Awards
+
+**Andres Bello Distinction** — National Category, awarded by Colombia's Ministry of Education (2018)
+
+---
+
+### Let's connect
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?style=flat&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/kevin-gamez/)
 [![Website](https://img.shields.io/badge/Website-000000?style=flat&logo=astro&logoColor=white)](https://kevingamez.co)
