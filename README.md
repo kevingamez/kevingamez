@@ -4,7 +4,7 @@
 
 Hi! I'm Kevin Gamez, the Founding Engineer at Enttor, the only outbound messaging platform startups need.
 
-At Enttor, I architected the full-stack application from the ground up, building browser automation systems, and building browser automation systems, and integrating AI pipelines that power personalized outreach at scale.
+At Enttor, I architected the full stack application from the ground up, building browser automation systems, and building browser automation systems, and integrating AI pipelines that power personalized outreach at scale.
 
 I have Bachelor and Masters in Information Engineering from Uniandes with a specialization in deep learning.
 
@@ -22,14 +22,14 @@ I have Bachelor and Masters in Information Engineering from Uniandes with a spec
 
 ### 📍 Previously
 
-- **Product Engineer** at Samsam — shipped features across shopper and merchant apps, refactored core backend services for a high-growth e-commerce startup.
-- **Graduate TA** at Universidad de los Andes — designed lab material and supported students in advanced CS courses.
+- **Product Engineer** at Samsam shipped features across shopper and merchant apps, refactored core backend services for a high-growth e-commerce startup.
+- **Graduate TA** at Universidad de los Andes designed lab material and supported students in advanced CS courses.
 
 ---
 
 ### 🏅 Awards
 
-🎖 **Andrés Bello Distinction** — National Category, awarded by Colombia's Ministry of Education (2018)
+🎖 **Andrés Bello Distinction** National Category, awarded by Colombia's Ministry of Education (2018)
 
 ---
 
