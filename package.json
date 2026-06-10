@@ -1,0 +1,14 @@
+{
+  "name": "kevingamez-profile-readme",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "dev": "node scripts/dev-server.js",
+    "vercel:dev": "vercel dev",
+    "check": "node -e \"const card = require('./api/github-card'); if (typeof card !== 'function') throw new Error('handler missing'); console.log('github-card handler ok')\""
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

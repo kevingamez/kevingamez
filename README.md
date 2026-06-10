@@ -1,5 +1,10 @@
 # Hey, I'm Kevin
 
+<!-- Deploy this repo to Vercel and update the hostname if the project URL differs. -->
+<p align="center">
+  <img src="https://kevingamez.vercel.app/api/github-card?username=kevingamez" alt="Kevin Gamez GitHub activity" width="900" />
+</p>
+
 **Founding Engineer @ [Enttor](https://www.enttor.ai/)** · Building the only outbound messaging platform startups need.
 
 Hi! I'm Kevin Gamez, the Founding Engineer at Enttor, the only outbound messaging platform startups need. At Enttor, I architected the full-stack application from the ground up, building browser automation systems and integrating AI pipelines that power personalized outreach at scale.
