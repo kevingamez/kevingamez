@@ -2,19 +2,69 @@ const DEFAULT_USERNAME = process.env.GITHUB_USERNAME || "kevingamez";
 const CACHE_SECONDS = Number(process.env.CARD_CACHE_SECONDS || 3600);
 const USER_AGENT = "kevingamez-profile-card";
 
-const colors = {
-  background: "#0d1117",
-  panel: "#161b22",
-  panelSoft: "#1f2933",
-  border: "#30363d",
-  text: "#f0f6fc",
-  muted: "#8b949e",
-  cyan: "#39c5cf",
-  green: "#7ee787",
-  amber: "#f2cc60",
-  coral: "#ff7b72",
-  violet: "#d2a8ff",
+const theme = {
+  cream: "#15110d",
+  cream2: "#1e1812",
+  cream3: "#2a221a",
+  panel: "#100c08",
+  ink: "#f4ede1",
+  ink2: "#cabeac",
+  muted: "#948a7a",
+  line: "rgba(244, 237, 225, 0.1)",
+  line2: "rgba(244, 237, 225, 0.2)",
+  coral: "#ff6a45",
+  coralStrong: "#ff8a68",
+  coralOnDark: "#ff7a5c",
 };
+
+const LANG_COLOR = {
+  TypeScript: "#3178c6",
+  JavaScript: "#f1e05a",
+  Python: "#3572A5",
+  Swift: "#F05138",
+  Dart: "#00B4AB",
+  Dockerfile: "#384d54",
+  CSS: "#563d7c",
+  HTML: "#e34c26",
+  Astro: "#ff5d01",
+  Rust: "#dea584",
+  Go: "#00ADD8",
+  Ruby: "#701516",
+  Java: "#b07219",
+  Kotlin: "#A97BFF",
+  C: "#555555",
+  "C++": "#f34b7d",
+  "C#": "#178600",
+  Shell: "#89e051",
+  PHP: "#4F5D95",
+  Lua: "#000080",
+  Vue: "#41b883",
+  Svelte: "#ff3e00",
+  Solidity: "#AA6746",
+  TeX: "#3D6117",
+  PowerShell: "#012456",
+  R: "#198CE7",
+  Scala: "#c22d40",
+  "Jupyter Notebook": "#DA5B0B",
+  SCSS: "#c6538c",
+  Sass: "#a53b70",
+  Vim: "#199f4b",
+  Makefile: "#427819",
+  YAML: "#cb171e",
+};
+
+const REPO_DESC = {
+  "personal-site": "This page, source included.",
+  "AD_ASTRA2023-SpaceInvaders": "Aerial object detection for Amazon deforestation events.",
+  Palladium_Chat: "Chat experiment in TypeScript.",
+  "budget-app": "Personal-finance app, written in Swift.",
+  "GCP-CloudRun": "Containerized service deploys on Cloud Run.",
+};
+
+const LEVEL_COLOR = ["#2a221a", "#9be9a8", "#40c463", "#30a14e", "#216e39"];
+const WEEK_COUNT = 52;
+const DAY_COUNT = 7;
+const GRAPH_SIZE = WEEK_COUNT * DAY_COUNT;
 
 module.exports = async function handler(req, res) {
   const username = getQueryValue(req, "username") || DEFAULT_USERNAME;
@@ -40,80 +90,214 @@ module.exports = async function handler(req, res) {
 
 async function buildCardData(username) {
   const token = process.env.GITHUB_TOKEN;
-
-  const [profileResult, reposResult, eventsResult, contributionsResult] =
-    await Promise.allSettled([
-      fetchJson(`https://api.github.com/users/${encodeURIComponent(username)}`, token),
-      fetchJson(
-        `https://api.github.com/users/${encodeURIComponent(
-          username,
-        )}/repos?type=owner&sort=pushed&per_page=100`,
-        token,
-      ),
-      fetchJson(
-        `https://api.github.com/users/${encodeURIComponent(
-          username,
-        )}/events/public?per_page=100`,
-        token,
-      ),
-      fetchContributionCalendar(username, token),
-    ]);
+  const [profileResult, reposResult, calendarResult] = await Promise.allSettled([
+    fetchJson(`https://api.github.com/users/${encodeURIComponent(username)}`, token),
+    fetchJson(
+      `https://api.github.com/users/${encodeURIComponent(
+        username,
+      )}/repos?type=owner&sort=updated&per_page=100`,
+      token,
+    ),
+    fetchContributionCalendar(username, token),
+  ]);
 
   const profile = unwrap(profileResult, {});
   const repos = Array.isArray(unwrap(reposResult, [])) ? unwrap(reposResult, []) : [];
-  const events = Array.isArray(unwrap(eventsResult, [])) ? unwrap(eventsResult, []) : [];
-  const contributions = unwrap(contributionsResult, null);
   const ownerRepos = repos.filter((repo) => !repo.fork);
-  const pushedThisYear = ownerRepos.filter((repo) => isWithinDays(repo.pushed_at, 365));
-
-  const totalStars = ownerRepos.reduce(
-    (sum, repo) => sum + Number(repo.stargazers_count || 0),
-    0,
-  );
-  const totalForks = ownerRepos.reduce((sum, repo) => sum + Number(repo.forks_count || 0), 0);
-  const languages = getTopLanguages(ownerRepos);
-  const recentDays = getRecentActivityDays(events);
+  const languageStats = await buildLanguageStats(ownerRepos, token);
+  const calendar = unwrap(calendarResult, null) || emptyCalendar();
   const topRepos = ownerRepos
     .slice()
-    .sort((a, b) => Number(b.stargazers_count || 0) - Number(a.stargazers_count || 0))
-    .slice(0, 3)
+    .sort(
+      (a, b) =>
+        Number(b.stargazers_count || 0) - Number(a.stargazers_count || 0) ||
+        String(b.updated_at || "").localeCompare(String(a.updated_at || "")),
+    )
+    .slice(0, 4)
     .map((repo) => ({
       name: repo.name,
+      description: REPO_DESC[repo.name] || repo.description || "",
+      language: repo.language || "Other",
+      color: colorFor(repo.language || "Other"),
       stars: Number(repo.stargazers_count || 0),
-      language: repo.language || "Code",
+      url: repo.html_url || `https://github.com/${username}/${repo.name}`,
     }));
 
   return {
     username,
     name: profile.name || username,
     publicRepos: Number(profile.public_repos || ownerRepos.length || 0),
-    followers: Number(profile.followers || 0),
-    totalStars,
-    totalForks,
-    pushedThisYear: pushedThisYear.length,
-    languages,
+    yearsOnGithub: getYearsOnGithub(profile.created_at),
+    languagesShipped: languageStats.languagesShipped,
+    languageMix: languageStats.languageMix,
     topRepos,
-    recentDays,
-    contributions,
-    updatedAt: new Date(),
+    calendar,
+  };
+}
+
+async function buildLanguageStats(repos, token) {
+  const skipLangs = new Set(["Jupyter Notebook"]);
+  const totals = new Map();
+  const languagePayloads = await pMap(repos, 5, (repo) =>
+    fetchRepoLanguages(repo.full_name, token),
+  );
+
+  for (const langs of languagePayloads) {
+    for (const [name, bytes] of Object.entries(langs)) {
+      if (skipLangs.has(name)) {
+        continue;
+      }
+      totals.set(name, (totals.get(name) || 0) + Number(bytes || 0));
+    }
+  }
+
+  if (totals.size === 0) {
+    for (const repo of repos) {
+      if (!repo.language || skipLangs.has(repo.language)) {
+        continue;
+      }
+      totals.set(repo.language, (totals.get(repo.language) || 0) + 1);
+    }
+  }
+
+  const totalBytes = Array.from(totals.values()).reduce((sum, value) => sum + value, 0) || 1;
+  const languageMix = Array.from(totals.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([name, bytes]) => ({
+      name,
+      pct: Math.max(1, Math.round((bytes / totalBytes) * 100)),
+      color: colorFor(name),
+    }));
+
+  const pctSum = languageMix.reduce((sum, item) => sum + item.pct, 0);
+  if (languageMix.length > 0 && pctSum !== 100) {
+    languageMix[0] = { ...languageMix[0], pct: languageMix[0].pct + (100 - pctSum) };
+  }
+
+  return {
+    languagesShipped: totals.size,
+    languageMix,
   };
 }
 
 async function fetchContributionCalendar(username, token) {
+  const [publicResult, graphqlResult] = await Promise.allSettled([
+    fetchContributionCalendarPublic(username),
+    fetchContributionCalendarGraphQL(username, token),
+  ]);
+
+  const publicCalendar = unwrap(publicResult, null);
+  if (publicCalendar?.days?.length) {
+    return publicCalendar;
+  }
+
+  const graphqlCalendar = unwrap(graphqlResult, null);
+  if (graphqlCalendar?.days?.length) {
+    return graphqlCalendar;
+  }
+
+  return emptyCalendar();
+}
+
+async function fetchContributionCalendarPublic(username) {
+  const response = await fetch(
+    `https://github.com/users/${encodeURIComponent(username)}/contributions`,
+    {
+      headers: {
+        Accept: "text/html",
+        "User-Agent": USER_AGENT,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const html = await response.text();
+  const cellRe = /<td\b[^>]*class="[^"]*ContributionCalendar-day[^"]*"[^>]*>/g;
+  const cells = [];
+  let match;
+
+  while ((match = cellRe.exec(html)) !== null) {
+    const tag = match[0];
+    const date = tag.match(/data-date="([\d-]+)"/)?.[1];
+    const level = tag.match(/data-level="(\d)"/)?.[1];
+    const id = tag.match(/\sid="([^"]+)"/)?.[1] || null;
+
+    if (!date || level == null) {
+      continue;
+    }
+
+    cells.push({
+      id,
+      date,
+      level: clampLevel(Number(level)),
+    });
+  }
+
+  if (cells.length === 0) {
+    return null;
+  }
+
+  const counts = new Map();
+  const tipRe = /<tool-tip\b[^>]*\sfor="([^"]+)"[^>]*>([^<]+)<\/tool-tip>/g;
+
+  while ((match = tipRe.exec(html)) !== null) {
+    const id = match[1];
+    const text = decodeHtml(match[2]);
+    const count = text.match(/^([\d,]+|No)\s+contribution/i);
+    counts.set(
+      id,
+      count
+        ? count[1].toLowerCase() === "no"
+          ? 0
+          : Number(count[1].replace(/,/g, ""))
+        : 0,
+    );
+  }
+
+  const days = cells
+    .map((cell) => {
+      const known = cell.id ? counts.get(cell.id) : undefined;
+      return {
+        date: cell.date,
+        count: known ?? (cell.level === 0 ? 0 : cell.level * 2),
+        level: cell.level,
+      };
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const totalContributions = days.reduce((sum, day) => sum + day.count, 0);
+  const { longest, current } = getStreaks(days);
+  return {
+    totalContributions,
+    days,
+    longestStreak: longest,
+    currentStreak: current,
+  };
+}
+
+async function fetchContributionCalendarGraphQL(username, token) {
   if (!token) {
     return null;
   }
 
+  const to = new Date();
+  const from = new Date(to.getTime() - 365 * 24 * 60 * 60 * 1000);
   const query = `
-    query ProfileCard($login: String!) {
+    query ProfileContribs($login: String!, $from: DateTime!, $to: DateTime!) {
       user(login: $login) {
-        contributionsCollection {
+        contributionsCollection(from: $from, to: $to) {
+          restrictedContributionsCount
           contributionCalendar {
             totalContributions
             weeks {
               contributionDays {
                 date
                 contributionCount
+                contributionLevel
               }
             }
           }
@@ -125,19 +309,57 @@ async function fetchContributionCalendar(username, token) {
   const response = await fetch("https://api.github.com/graphql", {
     method: "POST",
     headers: getGithubHeaders(token, true),
-    body: JSON.stringify({ query, variables: { login: username } }),
+    body: JSON.stringify({
+      query,
+      variables: {
+        login: username,
+        from: from.toISOString(),
+        to: to.toISOString(),
+      },
+    }),
   });
 
   if (!response.ok) {
-    throw new Error(`GitHub GraphQL ${response.status}`);
+    return null;
   }
 
   const payload = await response.json();
-  if (payload.errors) {
-    throw new Error(payload.errors.map((item) => item.message).join(", "));
+  const collection = payload.data?.user?.contributionsCollection;
+  const calendar = collection?.contributionCalendar;
+
+  if (!calendar?.weeks) {
+    return null;
   }
 
-  return payload.data?.user?.contributionsCollection?.contributionCalendar || null;
+  const days = calendar.weeks.flatMap((week) =>
+    (week.contributionDays || []).map((day) => ({
+      date: day.date,
+      count: Number(day.contributionCount || 0),
+      level: contributionLevelToNumber(day.contributionLevel),
+    })),
+  );
+  const { longest, current } = getStreaks(days);
+
+  return {
+    totalContributions:
+      Number(calendar.totalContributions || 0) +
+      Number(collection.restrictedContributionsCount || 0),
+    days,
+    longestStreak: longest,
+    currentStreak: current,
+  };
+}
+
+async function fetchRepoLanguages(fullName, token) {
+  if (!fullName) {
+    return {};
+  }
+
+  try {
+    return await fetchJson(`https://api.github.com/repos/${fullName}/languages`, token);
+  } catch {
+    return {};
+  }
 }
 
 async function fetchJson(url, token) {
@@ -146,7 +368,7 @@ async function fetchJson(url, token) {
   });
 
   if (!response.ok) {
-    throw new Error(`GitHub REST ${response.status}`);
+    throw new Error(`GitHub ${response.status}`);
   }
 
   return response.json();
@@ -154,7 +376,7 @@ async function fetchJson(url, token) {
 
 function getGithubHeaders(token, isGraphql) {
   const headers = {
-    Accept: isGraphql ? "application/vnd.github+json" : "application/vnd.github+json",
+    Accept: "application/vnd.github+json",
     "User-Agent": USER_AGENT,
     "X-GitHub-Api-Version": "2022-11-28",
   };
@@ -170,235 +392,352 @@ function getGithubHeaders(token, isGraphql) {
   return headers;
 }
 
-function getTopLanguages(repos) {
-  const totals = new Map();
-
-  for (const repo of repos) {
-    if (!repo.language) {
-      continue;
-    }
-
-    const current = totals.get(repo.language) || 0;
-    totals.set(repo.language, current + Math.max(1, Number(repo.stargazers_count || 0) + 1));
-  }
-
-  const sorted = Array.from(totals.entries())
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 5);
-
-  const total = sorted.reduce((sum, item) => sum + item.value, 0) || 1;
-  return sorted.map((item) => ({
-    ...item,
-    percent: Math.round((item.value / total) * 100),
-  }));
-}
-
-function getRecentActivityDays(events) {
-  const counts = new Map();
-  const today = startOfDay(new Date());
-
-  for (let index = 29; index >= 0; index -= 1) {
-    const day = new Date(today);
-    day.setUTCDate(day.getUTCDate() - index);
-    counts.set(toDateKey(day), 0);
-  }
-
-  for (const event of events) {
-    const key = toDateKey(new Date(event.created_at));
-    if (counts.has(key)) {
-      counts.set(key, counts.get(key) + 1);
-    }
-  }
-
-  const max = Math.max(1, ...Array.from(counts.values()));
-  return Array.from(counts.entries()).map(([date, count]) => ({
-    date,
-    count,
-    level: count === 0 ? 0 : Math.max(1, Math.ceil((count / max) * 4)),
-  }));
-}
-
 function renderSvg(data) {
-  const contributions = getContributionDays(data.contributions);
-  const activityDays = contributions.length > 0 ? contributions : data.recentDays;
-  const contributionTotal = data.contributions?.totalContributions;
-  const metricLabel = contributionTotal == null ? "Public activity" : "Contributions";
-  const metricValue = contributionTotal == null ? sumRecentActivity(data.recentDays) : contributionTotal;
-  const updated = formatUpdatedAt(data.updatedAt);
-  const langRows = data.languages.length > 0 ? data.languages : [{ name: "Code", percent: 100 }];
-  const topRepos = data.topRepos.length > 0 ? data.topRepos : [{ name: "Public repos", stars: data.publicRepos, language: "GitHub" }];
+  const calendarDays = getGraphDays(data.calendar);
+  const languageMix =
+    data.languageMix.length > 0
+      ? data.languageMix
+      : [{ name: "Code", pct: 100, color: theme.coralOnDark }];
+  const repos = data.topRepos.length > 0 ? data.topRepos : fallbackRepos(data.username);
 
   return `
-<svg width="900" height="330" viewBox="0 0 900 330" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+<svg width="900" height="650" viewBox="0 0 900 650" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">${escapeXml(data.name)} GitHub activity</title>
-  <desc id="desc">Animated GitHub profile card generated from public GitHub data.</desc>
+  <desc id="desc">GitHub profile animation styled after kevingamez.com.</desc>
   <style>
-    .label { fill: ${colors.muted}; font: 500 12px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: 0; }
-    .title { fill: ${colors.text}; font: 700 26px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: 0; }
-    .subtitle { fill: ${colors.muted}; font: 500 14px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: 0; }
-    .metric-value { fill: ${colors.text}; font: 700 26px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: 0; }
-    .metric-name { fill: ${colors.muted}; font: 600 11px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: .7px; text-transform: uppercase; }
-    .repo { fill: ${colors.text}; font: 650 13px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: 0; }
-    .small { fill: ${colors.muted}; font: 500 11px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: 0; }
-    .metric, .repo-row, .lang-row { animation: fadeUp .72s cubic-bezier(.2,.8,.2,1) both; }
-    .day { animation: dayIn .42s cubic-bezier(.2,.8,.2,1) both; transform-box: fill-box; transform-origin: center; }
-    .bar-fill { animation: growX .9s cubic-bezier(.2,.8,.2,1) both; transform-box: fill-box; transform-origin: left center; }
-    .scan { animation: scan 4.4s linear infinite; }
-    .pulse { animation: pulse 2.6s ease-in-out infinite; }
-    .dash { animation: draw 2.4s cubic-bezier(.2,.8,.2,1) both; stroke-dasharray: 520; stroke-dashoffset: 520; }
-    @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes dayIn { from { opacity: 0; transform: scale(.25); } to { opacity: 1; transform: scale(1); } }
-    @keyframes growX { from { transform: scaleX(.05); } to { transform: scaleX(1); } }
-    @keyframes scan { from { transform: translateX(-160px); } to { transform: translateX(920px); } }
-    @keyframes pulse { 0%, 100% { opacity: .46; } 50% { opacity: 1; } }
-    @keyframes draw { to { stroke-dashoffset: 0; } }
+    .sans { font-family: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .serif { font-family: Fraunces, Georgia, "Times New Roman", serif; }
+    .cap { fill: ${theme.coralOnDark}; font-size: 10.5px; letter-spacing: .06em; }
+    .stat { animation: gh-stat-in .6s ease both; }
+    .stat-num { fill: ${theme.ink}; font-size: 58px; font-weight: 500; letter-spacing: 0; }
+    .stat-lbl { fill: ${theme.coralOnDark}; font-size: 11.5px; letter-spacing: .04em; }
+    .stat-sub { fill: rgba(250, 247, 240, .55); font-size: 13px; }
+    .lang-head { fill: rgba(250, 247, 240, .55); font-size: 12px; letter-spacing: .01em; }
+    .lang-head-strong { fill: ${theme.ink}; font-size: 12px; font-weight: 600; letter-spacing: .01em; }
+    .lang-seg { animation: lang-grow 1.5s cubic-bezier(.2,.8,.3,1) both; transform-box: fill-box; transform-origin: left center; }
+    .legend { fill: rgba(250, 247, 240, .78); font-size: 11px; }
+    .card-title { fill: ${theme.ink}; font-size: 22px; font-weight: 400; letter-spacing: 0; }
+    .card-kicker { fill: ${theme.muted}; font-size: 11px; letter-spacing: .06em; }
+    .dow, .month, .small { fill: ${theme.muted}; font-size: 10px; letter-spacing: .04em; }
+    .day { animation: day-in .55s cubic-bezier(.2,.8,.3,1.25) both; transform-box: fill-box; transform-origin: center; }
+    .cs { animation: gh-stat-in .6s ease both; }
+    .cs-num { fill: ${theme.ink}; font-size: 28px; font-weight: 400; letter-spacing: 0; }
+    .cs-num.coral { fill: ${theme.coral}; }
+    .cs-lbl { fill: ${theme.muted}; font-size: 9.5px; letter-spacing: .04em; }
+    .repo-row { animation: repo-in .55s ease both; }
+    .repo-name { fill: ${theme.ink}; font-size: 13px; font-weight: 500; letter-spacing: 0; }
+    .repo-desc { fill: ${theme.muted}; font-size: 12.5px; letter-spacing: 0; }
+    .repo-stat { fill: ${theme.muted}; font-size: 11px; letter-spacing: 0; }
+    @keyframes gh-stat-in { from { opacity: .45; } to { opacity: 1; } }
+    @keyframes lang-grow { from { transform: scaleX(.18); } to { transform: scaleX(1); } }
+    @keyframes day-in { from { opacity: .35; transform: scale(.55); } to { opacity: 1; transform: scale(1); } }
+    @keyframes repo-in { from { opacity: .45; } to { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) {
+      .stat, .lang-seg, .day, .cs, .repo-row { animation: none !important; opacity: 1 !important; transform: none !important; }
+    }
   </style>
 
-  <defs>
-    <linearGradient id="edge" x1="0" x2="900" y1="0" y2="330" gradientUnits="userSpaceOnUse">
-      <stop stop-color="${colors.cyan}" stop-opacity=".55"/>
-      <stop offset=".48" stop-color="${colors.green}" stop-opacity=".32"/>
-      <stop offset="1" stop-color="${colors.coral}" stop-opacity=".42"/>
-    </linearGradient>
-    <linearGradient id="scanFill" x1="0" x2="140" y1="0" y2="0" gradientUnits="userSpaceOnUse">
-      <stop stop-color="${colors.cyan}" stop-opacity="0"/>
-      <stop offset=".5" stop-color="${colors.cyan}" stop-opacity=".28"/>
-      <stop offset="1" stop-color="${colors.cyan}" stop-opacity="0"/>
-    </linearGradient>
-    <clipPath id="clip">
-      <rect x="1" y="1" width="898" height="328" rx="8"/>
-    </clipPath>
-  </defs>
+  <rect width="900" height="650" rx="14" fill="${theme.cream}"/>
 
-  <rect x="1" y="1" width="898" height="328" rx="8" fill="${colors.background}" stroke="url(#edge)" stroke-width="1.5"/>
-  <g clip-path="url(#clip)">
-    <rect class="scan" x="0" y="0" width="140" height="330" fill="url(#scanFill)" opacity=".72"/>
-    <path class="dash" d="M35 270 C142 238 183 302 283 250 C369 206 434 221 506 178 C604 119 679 155 794 98" stroke="${colors.cyan}" stroke-width="1.5" opacity=".26"/>
+  <g transform="translate(20 20)">
+    <rect width="860" height="260" rx="14" fill="${theme.panel}" stroke="${theme.line}"/>
+    <text class="mono cap" x="32" y="32">github.com/${escapeXml(data.username)} · updated daily</text>
+
+    <g transform="translate(32 70)">
+      ${renderBannerStat(0, data.publicRepos, "repos shipped", "public and org work", 0)}
+      ${renderBannerStat(268, data.languagesShipped, "languages shipped", "TypeScript leads · Python is second", 100)}
+      ${renderBannerStat(536, data.yearsOnGithub, "years on github", "joined April 2019", 200)}
+    </g>
+
+    <g transform="translate(32 190)">
+      <text class="sans lang-head" x="0" y="0">language mix</text>
+      <text class="sans lang-head-strong" x="610" y="0">across all repos I work on</text>
+      <rect x="0" y="15" width="796" height="14" rx="7" fill="rgba(250, 247, 240, .07)"/>
+      ${renderLanguageSegments(languageMix)}
+      ${renderLanguageLegend(languageMix.slice(0, 5))}
+    </g>
   </g>
 
-  <g transform="translate(34 31)">
-    <text class="title" x="0" y="27">${escapeXml(data.name)}</text>
-    <text class="subtitle" x="0" y="52">@${escapeXml(data.username)} · GitHub pulse · ${escapeXml(updated)}</text>
-    <circle class="pulse" cx="822" cy="18" r="6" fill="${colors.green}"/>
-    <text class="label" x="696" y="23">live from GitHub</text>
+  <g transform="translate(20 315)">
+    <rect width="535" height="315" rx="12" fill="${theme.cream2}" stroke="${theme.line}"/>
+    <text class="serif card-title" x="22" y="37">Contributions · @${escapeXml(data.username)}</text>
+    <text class="mono card-kicker" x="513" y="36" text-anchor="end">last 12 months</text>
+    ${renderContributionGraph(calendarDays)}
+    ${renderContributionLegend()}
+    <line x1="22" x2="513" y1="238" y2="238" stroke="${theme.line2}" stroke-dasharray="4 5"/>
+    <g transform="translate(22 276)">
+      ${renderContribStat(0, data.calendar.totalContributions, "Commits · 12mo", true, 200)}
+      ${renderContribStat(164, data.calendar.currentStreak, "Current streak", false, 400)}
+      ${renderContribStat(328, data.calendar.longestStreak, "Longest streak", false, 600)}
+    </g>
   </g>
 
-  <g transform="translate(34 100)">
-    ${renderMetric(0, metricLabel, formatNumber(metricValue), colors.green, 0)}
-    ${renderMetric(143, "Stars", formatNumber(data.totalStars), colors.amber, 80)}
-    ${renderMetric(286, "Repos", formatNumber(data.publicRepos), colors.cyan, 160)}
-    ${renderMetric(429, "Active repos", formatNumber(data.pushedThisYear), colors.coral, 240)}
-  </g>
-
-  <g transform="translate(34 184)">
-    <text class="metric-name" x="0" y="0">Activity map</text>
-    ${renderActivityMap(activityDays)}
-    <text class="small" x="0" y="104">${escapeXml(getActivityCaption(data.contributions))}</text>
-  </g>
-
-  <g transform="translate(610 100)">
-    <text class="metric-name" x="0" y="0">Top languages</text>
-    ${langRows.map((item, index) => renderLanguageRow(item, index)).join("")}
-  </g>
-
-  <g transform="translate(610 222)">
-    <text class="metric-name" x="0" y="0">Notable repos</text>
-    ${topRepos.map((repo, index) => renderRepoRow(repo, index)).join("")}
+  <g transform="translate(575 315)">
+    ${repos.map((repo, index) => renderRepoRow(repo, data.username, index)).join("")}
   </g>
 </svg>`.trim();
 }
 
-function renderMetric(x, name, value, color, delay) {
+function renderBannerStat(x, value, label, sub, delay) {
   return `
-    <g class="metric" style="animation-delay: ${delay}ms" transform="translate(${x} 0)">
-      <rect x="0" y="0" width="124" height="58" rx="8" fill="${colors.panel}" stroke="${colors.border}"/>
-      <rect x="0" y="0" width="3" height="58" rx="1.5" fill="${color}"/>
-      <text class="metric-value" x="15" y="32">${escapeXml(value)}</text>
-      <text class="metric-name" x="15" y="49">${escapeXml(name)}</text>
-    </g>`;
+      <g class="stat" style="animation-delay:${delay}ms" transform="translate(${x} 0)">
+        <rect x="0" y="0" width="2" height="82" rx="1" fill="${theme.coralOnDark}"/>
+        <text class="mono stat-num" x="18" y="46">${escapeXml(formatPlainNumber(value))}</text>
+        <text class="mono stat-lbl" x="18" y="70">${escapeXml(label)}</text>
+        <text class="sans stat-sub" x="18" y="91">${escapeXml(sub)}</text>
+      </g>`;
 }
 
-function renderActivityMap(days) {
-  const size = 8;
-  const gap = 3;
-  const colorsByLevel = ["#21262d", "#123923", "#1f6f3b", "#2ea043", "#7ee787"];
-  const maxColumns = Math.ceil(days.length / 7);
-
-  return days
-    .map((day, index) => {
-      const column = Math.floor(index / 7);
-      const row = index % 7;
-      const x = column * (size + gap);
-      const y = 18 + row * (size + gap);
-      const level = Math.max(0, Math.min(4, Number(day.level || 0)));
-      const delay = Math.min(900, index * (maxColumns > 30 ? 3 : 14));
-
-      return `<rect class="day" style="animation-delay: ${delay}ms" x="${x}" y="${y}" width="${size}" height="${size}" rx="2" fill="${colorsByLevel[level]}"><title>${escapeXml(day.date)}: ${Number(day.count || 0)}</title></rect>`;
+function renderLanguageSegments(languageMix) {
+  let x = 0;
+  return languageMix
+    .map((lang, index) => {
+      const width = Math.max(4, Math.round((lang.pct / 100) * 796));
+      const segment = `<rect class="lang-seg" style="animation-delay:${600 + index * 90}ms" x="${x}" y="15" width="${width}" height="14" fill="${lang.color}"/>`;
+      x += width;
+      return segment;
     })
     .join("");
 }
 
-function renderLanguageRow(item, index) {
-  const y = 22 + index * 20;
-  const palette = [colors.cyan, colors.green, colors.amber, colors.coral, colors.violet];
-  const width = Math.max(6, Math.min(190, Math.round((item.percent / 100) * 190)));
+function renderLanguageLegend(languageMix) {
+  let x = 0;
+  return languageMix
+    .map((lang) => {
+      const label = `${lang.name} · ${lang.pct}%`;
+      const item = `
+      <g transform="translate(${x} 55)">
+        <rect x="0" y="-8" width="9" height="9" rx="2" fill="${lang.color}"/>
+        <text class="mono legend" x="16" y="0">${escapeXml(label)}</text>
+      </g>`;
+      x += Math.min(190, 31 + label.length * 7);
+      return item;
+    })
+    .join("");
+}
+
+function renderContributionGraph(days) {
+  const graphX = 75;
+  const graphY = 64;
+  const size = 7;
+  const gap = 2;
 
   return `
-    <g class="lang-row" style="animation-delay: ${220 + index * 90}ms" transform="translate(0 ${y})">
-      <text class="small" x="0" y="0">${escapeXml(truncate(item.name, 18))}</text>
-      <text class="small" x="214" y="0" text-anchor="end">${item.percent}%</text>
-      <rect x="0" y="7" width="214" height="5" rx="2.5" fill="${colors.panelSoft}"/>
-      <rect class="bar-fill" x="0" y="7" width="${width}" height="5" rx="2.5" fill="${palette[index % palette.length]}"/>
+    <g transform="translate(22 58)">
+      <text class="mono dow" x="0" y="${graphY + 1 * (size + gap) + 6}">Mon</text>
+      <text class="mono dow" x="0" y="${graphY + 3 * (size + gap) + 6}">Wed</text>
+      <text class="mono dow" x="0" y="${graphY + 5 * (size + gap) + 6}">Fri</text>
+      ${renderMonthLabels(days, graphX, 43, size, gap)}
+      <g transform="translate(${graphX} ${graphY})">
+        ${days
+          .map((day, index) => {
+            const week = Math.floor(index / DAY_COUNT);
+            const dow = index % DAY_COUNT;
+            const x = week * (size + gap);
+            const y = dow * (size + gap);
+            const level = clampLevel(day.level);
+            const delay = week * 14 + dow * 5;
+
+            return `<rect class="day" style="animation-delay:${delay}ms" x="${x}" y="${y}" width="${size}" height="${size}" rx="2" fill="${LEVEL_COLOR[level]}" stroke="rgba(31, 29, 26, .04)"><title>${escapeXml(`${day.count} contribution${day.count === 1 ? "" : "s"} on ${day.date}`)}</title></rect>`;
+          })
+          .join("")}
+      </g>
     </g>`;
 }
 
-function renderRepoRow(repo, index) {
-  const y = 22 + index * 22;
-  const palette = [colors.amber, colors.cyan, colors.green];
+function renderMonthLabels(days, graphX, y, size, gap) {
+  const labels = new Array(WEEK_COUNT).fill("");
+  let previousMonth = "";
+  let previousLabelWeek = -10;
 
-  return `
-    <g class="repo-row" style="animation-delay: ${360 + index * 90}ms" transform="translate(0 ${y})">
-      <circle cx="5" cy="-4" r="4" fill="${palette[index % palette.length]}"/>
-      <text class="repo" x="17" y="0">${escapeXml(truncate(repo.name, 22))}</text>
-      <text class="small" x="214" y="0" text-anchor="end">${escapeXml(repo.language)} · ${formatNumber(repo.stars)} stars</text>
-    </g>`;
-}
+  days.forEach((day, index) => {
+    const date = new Date(`${day.date}T00:00:00Z`);
+    const monthKey = `${date.getUTCFullYear()}-${date.getUTCMonth()}`;
+    const week = Math.floor(index / DAY_COUNT);
 
-function getContributionDays(calendar) {
-  if (!calendar?.weeks) {
-    return [];
-  }
-
-  const days = calendar.weeks.flatMap((week) => week.contributionDays || []);
-  const max = Math.max(1, ...days.map((day) => Number(day.contributionCount || 0)));
-
-  return days.map((day) => {
-    const count = Number(day.contributionCount || 0);
-    return {
-      date: day.date,
-      count,
-      level: count === 0 ? 0 : Math.max(1, Math.ceil((count / max) * 4)),
-    };
+    if (index === 0 || monthKey !== previousMonth) {
+      if (week - previousLabelWeek >= 4) {
+        labels[week] = date.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+        previousLabelWeek = week;
+      }
+      previousMonth = monthKey;
+    }
   });
+
+  return labels
+    .map((label, week) =>
+      label
+        ? `<text class="mono month" x="${graphX + week * (size + gap)}" y="${y}">${escapeXml(label)}</text>`
+        : "",
+    )
+    .join("");
 }
 
-function getActivityCaption(contributions) {
-  if (contributions?.totalContributions != null) {
-    return `${formatNumber(contributions.totalContributions)} contributions in the current GitHub contribution year`;
-  }
+function renderContributionLegend() {
+  return `
+    <g transform="translate(22 216)">
+      <text class="mono small" x="0" y="0">Less</text>
+      ${LEVEL_COLOR.map(
+        (color, index) =>
+          `<rect x="${368 + index * 15}" y="-10" width="11" height="11" rx="2" fill="${color}"/>`,
+      ).join("")}
+      <text class="mono small" x="452" y="0">More</text>
+    </g>`;
+}
 
-  return "Public REST activity shown here. Set GITHUB_TOKEN on Vercel for the full contribution calendar.";
+function renderContribStat(x, value, label, coral, delay) {
+  return `
+      <g class="cs" style="animation-delay:${delay}ms" transform="translate(${x} 0)">
+        <text class="serif cs-num${coral ? " coral" : ""}" x="0" y="0">${escapeXml(formatPlainNumber(value))}</text>
+        <text class="mono cs-lbl" x="0" y="22">${escapeXml(label)}</text>
+      </g>`;
+}
+
+function renderRepoRow(repo, username, index) {
+  const y = index * 67;
+  const stat = repo.stars > 0 ? `★ ${repo.stars}   ${repo.language}` : repo.language;
+
+  return `
+    <g class="repo-row" style="animation-delay:${320 + index * 90}ms" transform="translate(0 ${y})">
+      <rect width="305" height="57" rx="8" fill="${theme.cream}" stroke="${theme.line}"/>
+      <text class="mono repo-name" x="16" y="22">${escapeXml(truncate(`${username} / ${repo.name}`, 34))}</text>
+      <text class="sans repo-desc" x="16" y="42">${escapeXml(truncate(repo.description, 42))}</text>
+      <circle cx="218" cy="21" r="4.5" fill="${repo.color}"/>
+      <text class="mono repo-stat" x="235" y="25">${escapeXml(truncate(stat, 12))}</text>
+    </g>`;
 }
 
 function renderErrorSvg(username, error) {
   return `
 <svg width="900" height="220" viewBox="0 0 900 220" fill="none" xmlns="http://www.w3.org/2000/svg" role="img">
-  <rect x="1" y="1" width="898" height="218" rx="8" fill="${colors.background}" stroke="${colors.border}"/>
-  <text x="34" y="62" fill="${colors.text}" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="26" font-weight="700">GitHub pulse</text>
-  <text x="34" y="96" fill="${colors.muted}" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="15">@${escapeXml(username)} data is temporarily unavailable.</text>
-  <text x="34" y="128" fill="${colors.coral}" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13">${escapeXml(error.message || "Unknown error")}</text>
+  <rect width="900" height="220" rx="14" fill="${theme.cream}"/>
+  <rect x="20" y="20" width="860" height="180" rx="14" fill="${theme.panel}" stroke="${theme.line}"/>
+  <text x="52" y="72" fill="${theme.ink}" font-family="Georgia, serif" font-size="26">GitHub</text>
+  <text x="52" y="105" fill="${theme.muted}" font-family="ui-monospace, Menlo, monospace" font-size="13">@${escapeXml(username)} data is temporarily unavailable.</text>
+  <text x="52" y="132" fill="${theme.coralOnDark}" font-family="ui-monospace, Menlo, monospace" font-size="12">${escapeXml(error.message || "Unknown error")}</text>
 </svg>`.trim();
+}
+
+function getGraphDays(calendar) {
+  const source = Array.isArray(calendar?.days) ? calendar.days.slice() : [];
+
+  if (source.length >= GRAPH_SIZE) {
+    return source.slice(-GRAPH_SIZE);
+  }
+
+  const filler = buildEmptyDays(GRAPH_SIZE - source.length, source[0]?.date);
+  return filler.concat(source);
+}
+
+function buildEmptyDays(count, beforeDate) {
+  const days = [];
+  const end = beforeDate ? new Date(`${beforeDate}T00:00:00Z`) : startOfUtcDay(new Date());
+  end.setUTCDate(end.getUTCDate() - (beforeDate ? 1 : 0));
+
+  for (let index = count - 1; index >= 0; index -= 1) {
+    const date = new Date(end);
+    date.setUTCDate(end.getUTCDate() - index);
+    days.push({
+      date: date.toISOString().slice(0, 10),
+      count: 0,
+      level: 0,
+    });
+  }
+
+  return days;
+}
+
+function fallbackRepos(username) {
+  return [
+    {
+      name: "github",
+      description: "Public work, commits, and language mix.",
+      language: "GitHub",
+      color: theme.coralOnDark,
+      stars: 0,
+      url: `https://github.com/${username}`,
+    },
+  ];
+}
+
+function emptyCalendar() {
+  return {
+    totalContributions: 0,
+    days: [],
+    longestStreak: 0,
+    currentStreak: 0,
+  };
+}
+
+function getStreaks(days) {
+  let longest = 0;
+  let run = 0;
+
+  for (const day of days) {
+    if (day.count > 0) {
+      run += 1;
+      longest = Math.max(longest, run);
+    } else {
+      run = 0;
+    }
+  }
+
+  let current = 0;
+  let start = days.length - 1;
+  if (start >= 0 && days[start].count === 0) {
+    start -= 1;
+  }
+
+  for (let index = start; index >= 0; index -= 1) {
+    if (days[index].count > 0) {
+      current += 1;
+    } else {
+      break;
+    }
+  }
+
+  return { longest, current };
+}
+
+async function pMap(items, concurrency, fn) {
+  const output = new Array(items.length);
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      output[index] = await fn(items[index]);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return output;
+}
+
+function contributionLevelToNumber(level) {
+  return (
+    {
+      NONE: 0,
+      FIRST_QUARTILE: 1,
+      SECOND_QUARTILE: 2,
+      THIRD_QUARTILE: 3,
+      FOURTH_QUARTILE: 4,
+    }[level] ?? 0
+  );
+}
+
+function getYearsOnGithub(createdAt) {
+  if (!createdAt) {
+    return 0;
+  }
+
+  const created = new Date(createdAt);
+  return Math.max(
+    0,
+    Math.floor((Date.now() - created.getTime()) / (365.25 * 24 * 60 * 60 * 1000)),
+  );
 }
 
 function getQueryValue(req, key) {
@@ -422,49 +761,34 @@ function unwrap(result, fallback) {
   return result.status === "fulfilled" ? result.value : fallback;
 }
 
-function isWithinDays(dateValue, days) {
-  if (!dateValue) {
-    return false;
-  }
-
-  const date = new Date(dateValue);
-  const now = Date.now();
-  return now - date.getTime() <= days * 24 * 60 * 60 * 1000;
+function colorFor(name) {
+  return LANG_COLOR[name] || "#888888";
 }
 
-function startOfDay(date) {
+function clampLevel(level) {
+  return Math.max(0, Math.min(4, Number(level || 0)));
+}
+
+function startOfUtcDay(date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
-function toDateKey(date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function sumRecentActivity(days) {
-  return days.reduce((sum, day) => sum + Number(day.count || 0), 0);
-}
-
-function formatNumber(value) {
-  return new Intl.NumberFormat("en", {
-    notation: Number(value) >= 10000 ? "compact" : "standard",
-    maximumFractionDigits: 1,
-  }).format(Number(value || 0));
-}
-
-function formatUpdatedAt(date) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "UTC",
-    timeZoneName: "short",
-  }).format(date);
+function formatPlainNumber(value) {
+  return new Intl.NumberFormat("en-US").format(Number(value || 0));
 }
 
 function truncate(value, maxLength) {
   const text = String(value || "");
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}...` : text;
+}
+
+function decodeHtml(value) {
+  return String(value || "")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
 }
 
 function escapeXml(value) {

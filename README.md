@@ -1,8 +1,7 @@
 # Hey, I'm Kevin
 
-<!-- Deploy this repo to Vercel and update the hostname if the project URL differs. -->
 <p align="center">
-  <img src="https://kevingamez.vercel.app/api/github-card?username=kevingamez" alt="Kevin Gamez GitHub activity" width="900" />
+  <img src="https://kevingamez.vercel.app/api/github-card?username=kevingamez&amp;v=site" alt="Kevin Gamez GitHub activity" width="900" />
 </p>
 
 **Founding Engineer @ [Enttor](https://www.enttor.ai/)** · Building the only outbound messaging platform startups need.
