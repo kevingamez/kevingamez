@@ -1,20 +1,19 @@
 const DEFAULT_USERNAME = process.env.GITHUB_USERNAME || "kevingamez";
-const CACHE_SECONDS = Number(process.env.CARD_CACHE_SECONDS || 3600);
 const USER_AGENT = "kevingamez-profile-card";
 
 const theme = {
-  cream: "#15110d",
-  cream2: "#1e1812",
-  cream3: "#2a221a",
-  panel: "#100c08",
-  ink: "#f4ede1",
-  ink2: "#cabeac",
-  muted: "#948a7a",
-  line: "rgba(244, 237, 225, 0.1)",
-  line2: "rgba(244, 237, 225, 0.2)",
-  coral: "#ff6a45",
-  coralStrong: "#ff8a68",
-  coralOnDark: "#ff7a5c",
+  cream: "#ffffff",
+  cream2: "#ffffff",
+  cream3: "#ebedf0",
+  panel: "#f6f8fa",
+  ink: "#24292f",
+  ink2: "#57606a",
+  muted: "#57606a",
+  line: "rgba(27, 31, 36, 0.15)",
+  line2: "rgba(27, 31, 36, 0.12)",
+  coral: "#0969da",
+  coralStrong: "#1f6feb",
+  coralOnDark: "#0969da",
 };
 
 const LANG_COLOR = {
@@ -61,7 +60,49 @@ const REPO_DESC = {
   "GCP-CloudRun": "Containerized service deploys on Cloud Run.",
 };
 
-const LEVEL_COLOR = ["#2a221a", "#9be9a8", "#40c463", "#30a14e", "#216e39"];
+const FALLBACK_LANGUAGE_MIX = [
+  { name: "Swift", pct: 34, color: colorFor("Swift") },
+  { name: "TypeScript", pct: 29, color: colorFor("TypeScript") },
+  { name: "CSS", pct: 9, color: colorFor("CSS") },
+  { name: "Kotlin", pct: 8, color: colorFor("Kotlin") },
+  { name: "Astro", pct: 6, color: colorFor("Astro") },
+  { name: "Python", pct: 6, color: colorFor("Python") },
+  { name: "Java", pct: 5, color: colorFor("Java") },
+  { name: "Dockerfile", pct: 3, color: colorFor("Dockerfile") },
+];
+
+const FALLBACK_TOP_REPOS = [
+  {
+    name: "personal-site",
+    description: REPO_DESC["personal-site"],
+    language: "TypeScript",
+    color: colorFor("TypeScript"),
+    stars: 0,
+  },
+  {
+    name: "AD_ASTRA2023-SpaceInvaders",
+    description: REPO_DESC["AD_ASTRA2023-SpaceInvaders"],
+    language: "Python",
+    color: colorFor("Python"),
+    stars: 0,
+  },
+  {
+    name: "budget-app",
+    description: REPO_DESC["budget-app"],
+    language: "Swift",
+    color: colorFor("Swift"),
+    stars: 0,
+  },
+  {
+    name: "GCP-CloudRun",
+    description: REPO_DESC["GCP-CloudRun"],
+    language: "Dockerfile",
+    color: colorFor("Dockerfile"),
+    stars: 0,
+  },
+];
+
+const LEVEL_COLOR = ["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"];
 const WEEK_COUNT = 52;
 const DAY_COUNT = 7;
 const GRAPH_SIZE = WEEK_COUNT * DAY_COUNT;
@@ -73,10 +114,7 @@ module.exports = async function handler(req, res) {
     const data = await buildCardData(username);
 
     res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
-    res.setHeader(
-      "Cache-Control",
-      `public, max-age=0, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=86400`,
-    );
+    res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.statusCode = 200;
     res.end(renderSvg(data));
@@ -106,33 +144,36 @@ async function buildCardData(username) {
   const ownerRepos = repos.filter((repo) => !repo.fork);
   const languageStats = await buildLanguageStats(ownerRepos, token);
   const calendar = unwrap(calendarResult, null) || emptyCalendar();
-  const topRepos = ownerRepos
-    .slice()
-    .sort(
-      (a, b) =>
-        Number(b.stargazers_count || 0) - Number(a.stargazers_count || 0) ||
-        String(b.updated_at || "").localeCompare(String(a.updated_at || "")),
-    )
-    .slice(0, 4)
-    .map((repo) => ({
-      name: repo.name,
-      description: REPO_DESC[repo.name] || repo.description || "",
-      language: repo.language || "Other",
-      color: colorFor(repo.language || "Other"),
-      stars: Number(repo.stargazers_count || 0),
-      url: repo.html_url || `https://github.com/${username}/${repo.name}`,
-    }));
+  const topRepos = buildTopRepos(ownerRepos, username);
 
   return {
     username,
     name: profile.name || username,
-    publicRepos: Number(profile.public_repos || ownerRepos.length || 0),
-    yearsOnGithub: getYearsOnGithub(profile.created_at),
-    languagesShipped: languageStats.languagesShipped,
-    languageMix: languageStats.languageMix,
-    topRepos,
+    publicRepos: Number(profile.public_repos || ownerRepos.length || 28),
+    yearsOnGithub: getYearsOnGithub(profile.created_at) || 7,
+    languagesShipped: languageStats.languagesShipped || 14,
+    languageMix: languageStats.languageMix.length > 0 ? languageStats.languageMix : FALLBACK_LANGUAGE_MIX,
+    topRepos: topRepos.length > 0 ? topRepos : FALLBACK_TOP_REPOS,
     calendar,
   };
+}
+
+function buildTopRepos(ownerRepos, username) {
+  const byName = new Map(ownerRepos.map((repo) => [repo.name, repo]));
+
+  return FALLBACK_TOP_REPOS.map((fallback) => {
+    const repo = byName.get(fallback.name);
+    const language = repo?.language || fallback.language;
+
+    return {
+      name: fallback.name,
+      description: fallback.description,
+      language,
+      color: colorFor(language),
+      stars: Number(repo?.stargazers_count || fallback.stars || 0),
+      url: repo?.html_url || `https://github.com/${username}/${fallback.name}`,
+    };
+  });
 }
 
 async function buildLanguageStats(repos, token) {
@@ -401,7 +442,7 @@ function renderSvg(data) {
   const repos = data.topRepos.length > 0 ? data.topRepos : fallbackRepos(data.username);
 
   return `
-<svg width="900" height="650" viewBox="0 0 900 650" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+<svg width="900" height="610" viewBox="0 0 900 610" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">${escapeXml(data.name)} GitHub activity</title>
   <desc id="desc">GitHub profile animation styled after kevingamez.com.</desc>
   <style>
@@ -410,13 +451,13 @@ function renderSvg(data) {
     .serif { font-family: Fraunces, Georgia, "Times New Roman", serif; }
     .cap { fill: ${theme.coralOnDark}; font-size: 10.5px; letter-spacing: .06em; }
     .stat { animation: gh-stat-in .6s ease both; }
-    .stat-num { fill: ${theme.ink}; font-size: 58px; font-weight: 500; letter-spacing: 0; }
+    .stat-num { fill: ${theme.ink}; font-size: 52px; font-weight: 500; letter-spacing: 0; }
     .stat-lbl { fill: ${theme.coralOnDark}; font-size: 11.5px; letter-spacing: .04em; }
-    .stat-sub { fill: rgba(250, 247, 240, .55); font-size: 13px; }
-    .lang-head { fill: rgba(250, 247, 240, .55); font-size: 12px; letter-spacing: .01em; }
+    .stat-sub { fill: ${theme.muted}; font-size: 13px; }
+    .lang-head { fill: ${theme.muted}; font-size: 12px; letter-spacing: .01em; }
     .lang-head-strong { fill: ${theme.ink}; font-size: 12px; font-weight: 600; letter-spacing: .01em; }
     .lang-seg { animation: lang-grow 1.5s cubic-bezier(.2,.8,.3,1) both; transform-box: fill-box; transform-origin: left center; }
-    .legend { fill: rgba(250, 247, 240, .78); font-size: 11px; }
+    .legend { fill: ${theme.ink2}; font-size: 11px; }
     .card-title { fill: ${theme.ink}; font-size: 22px; font-weight: 400; letter-spacing: 0; }
     .card-kicker { fill: ${theme.muted}; font-size: 11px; letter-spacing: .06em; }
     .dow, .month, .small { fill: ${theme.muted}; font-size: 10px; letter-spacing: .04em; }
@@ -426,9 +467,9 @@ function renderSvg(data) {
     .cs-num.coral { fill: ${theme.coral}; }
     .cs-lbl { fill: ${theme.muted}; font-size: 9.5px; letter-spacing: .04em; }
     .repo-row { animation: repo-in .55s ease both; }
-    .repo-name { fill: ${theme.ink}; font-size: 13px; font-weight: 500; letter-spacing: 0; }
-    .repo-desc { fill: ${theme.muted}; font-size: 12.5px; letter-spacing: 0; }
-    .repo-stat { fill: ${theme.muted}; font-size: 11px; letter-spacing: 0; }
+    .repo-name { fill: ${theme.ink}; font-size: 12.5px; font-weight: 500; letter-spacing: 0; }
+    .repo-desc { fill: ${theme.muted}; font-size: 11.5px; letter-spacing: 0; }
+    .repo-stat { fill: ${theme.muted}; font-size: 10.5px; letter-spacing: 0; }
     @keyframes gh-stat-in { from { opacity: .45; } to { opacity: 1; } }
     @keyframes lang-grow { from { transform: scaleX(.18); } to { transform: scaleX(1); } }
     @keyframes day-in { from { opacity: .35; transform: scale(.55); } to { opacity: 1; transform: scale(1); } }
@@ -438,42 +479,41 @@ function renderSvg(data) {
     }
   </style>
 
-  <rect width="900" height="650" rx="14" fill="${theme.cream}"/>
+  <rect width="900" height="610" rx="14" fill="${theme.cream}"/>
 
   <g transform="translate(20 20)">
-    <rect width="860" height="260" rx="14" fill="${theme.panel}" stroke="${theme.line}"/>
-    <text class="mono cap" x="32" y="32">github.com/${escapeXml(data.username)} · updated daily</text>
+    <rect width="860" height="230" rx="14" fill="${theme.panel}" stroke="${theme.line}"/>
+    <text class="mono cap" x="32" y="32">github.com/${escapeXml(data.username)}</text>
 
-    <g transform="translate(32 70)">
+    <g transform="translate(32 66)">
       ${renderBannerStat(0, data.publicRepos, "repos shipped", "public and org work", 0)}
-      ${renderBannerStat(268, data.languagesShipped, "languages shipped", "TypeScript leads · Python is second", 100)}
-      ${renderBannerStat(536, data.yearsOnGithub, "years on github", "joined April 2019", 200)}
+      ${renderBannerStat(278, data.languagesShipped, "languages shipped", "TypeScript · Python · Swift", 100)}
+      ${renderBannerStat(556, data.yearsOnGithub, "years on github", "joined April 2019", 200)}
     </g>
 
-    <g transform="translate(32 190)">
+    <g transform="translate(32 168)">
       <text class="sans lang-head" x="0" y="0">language mix</text>
-      <text class="sans lang-head-strong" x="610" y="0">across all repos I work on</text>
-      <rect x="0" y="15" width="796" height="14" rx="7" fill="rgba(250, 247, 240, .07)"/>
+      <rect x="0" y="15" width="796" height="14" rx="7" fill="${theme.cream3}"/>
       ${renderLanguageSegments(languageMix)}
       ${renderLanguageLegend(languageMix.slice(0, 5))}
     </g>
   </g>
 
-  <g transform="translate(20 315)">
-    <rect width="535" height="315" rx="12" fill="${theme.cream2}" stroke="${theme.line}"/>
+  <g transform="translate(20 280)">
+    <rect width="545" height="310" rx="12" fill="${theme.cream2}" stroke="${theme.line}"/>
     <text class="serif card-title" x="22" y="37">Contributions · @${escapeXml(data.username)}</text>
-    <text class="mono card-kicker" x="513" y="36" text-anchor="end">last 12 months</text>
+    <text class="mono card-kicker" x="523" y="36" text-anchor="end">last 12 months</text>
     ${renderContributionGraph(calendarDays)}
     ${renderContributionLegend()}
-    <line x1="22" x2="513" y1="238" y2="238" stroke="${theme.line2}" stroke-dasharray="4 5"/>
-    <g transform="translate(22 276)">
+    <line x1="22" x2="523" y1="232" y2="232" stroke="${theme.line2}" stroke-dasharray="4 5"/>
+    <g transform="translate(22 270)">
       ${renderContribStat(0, data.calendar.totalContributions, "Commits · 12mo", true, 200)}
       ${renderContribStat(164, data.calendar.currentStreak, "Current streak", false, 400)}
       ${renderContribStat(328, data.calendar.longestStreak, "Longest streak", false, 600)}
     </g>
   </g>
 
-  <g transform="translate(575 315)">
+  <g transform="translate(585 280)">
     ${repos.map((repo, index) => renderRepoRow(repo, data.username, index)).join("")}
   </g>
 </svg>`.trim();
@@ -518,9 +558,9 @@ function renderLanguageLegend(languageMix) {
 }
 
 function renderContributionGraph(days) {
-  const graphX = 75;
+  const graphX = 58;
   const graphY = 64;
-  const size = 7;
+  const size = 6;
   const gap = 2;
 
   return `
@@ -539,7 +579,7 @@ function renderContributionGraph(days) {
             const level = clampLevel(day.level);
             const delay = week * 14 + dow * 5;
 
-            return `<rect class="day" style="animation-delay:${delay}ms" x="${x}" y="${y}" width="${size}" height="${size}" rx="2" fill="${LEVEL_COLOR[level]}" stroke="rgba(31, 29, 26, .04)"><title>${escapeXml(`${day.count} contribution${day.count === 1 ? "" : "s"} on ${day.date}`)}</title></rect>`;
+            return `<rect class="day" style="animation-delay:${delay}ms" x="${x}" y="${y}" width="${size}" height="${size}" rx="2" fill="${LEVEL_COLOR[level]}" stroke="${theme.line2}"><title>${escapeXml(`${day.count} contribution${day.count === 1 ? "" : "s"} on ${day.date}`)}</title></rect>`;
           })
           .join("")}
       </g>
@@ -576,11 +616,11 @@ function renderMonthLabels(days, graphX, y, size, gap) {
 
 function renderContributionLegend() {
   return `
-    <g transform="translate(22 216)">
+    <g transform="translate(22 210)">
       <text class="mono small" x="0" y="0">Less</text>
       ${LEVEL_COLOR.map(
         (color, index) =>
-          `<rect x="${368 + index * 15}" y="-10" width="11" height="11" rx="2" fill="${color}"/>`,
+          `<rect x="${378 + index * 14}" y="-10" width="10" height="10" rx="2" fill="${color}"/>`,
       ).join("")}
       <text class="mono small" x="452" y="0">More</text>
     </g>`;
@@ -595,16 +635,16 @@ function renderContribStat(x, value, label, coral, delay) {
 }
 
 function renderRepoRow(repo, username, index) {
-  const y = index * 67;
-  const stat = repo.stars > 0 ? `★ ${repo.stars}   ${repo.language}` : repo.language;
+  const y = index * 72;
+  const stat = repo.stars > 0 ? `${repo.language} · ${repo.stars} stars` : repo.language;
 
   return `
     <g class="repo-row" style="animation-delay:${320 + index * 90}ms" transform="translate(0 ${y})">
-      <rect width="305" height="57" rx="8" fill="${theme.cream}" stroke="${theme.line}"/>
-      <text class="mono repo-name" x="16" y="22">${escapeXml(truncate(`${username} / ${repo.name}`, 34))}</text>
-      <text class="sans repo-desc" x="16" y="42">${escapeXml(truncate(repo.description, 42))}</text>
-      <circle cx="218" cy="21" r="4.5" fill="${repo.color}"/>
-      <text class="mono repo-stat" x="235" y="25">${escapeXml(truncate(stat, 12))}</text>
+      <rect width="295" height="62" rx="8" fill="${theme.cream}" stroke="${theme.line}"/>
+      <text class="mono repo-name" x="16" y="21">${escapeXml(truncate(repo.name, 28))}</text>
+      <text class="sans repo-desc" x="16" y="40">${escapeXml(truncate(repo.description, 34))}</text>
+      <circle cx="20" cy="53" r="4" fill="${repo.color}"/>
+      <text class="mono repo-stat" x="32" y="56">${escapeXml(truncate(stat, 32))}</text>
     </g>`;
 }
 
